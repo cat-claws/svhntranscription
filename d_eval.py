@@ -12,7 +12,7 @@ config = {
 	'dataset':'svhnfull',
 	'training_step':'ordinary_step',
 	# 'z':6,
-	# 'checkpoint':'checkpoints/ResNet18_cifar10_var_1000.pt',
+	'checkpoint':'checkpoints/Aug28_23-50-39_Theseus_svhnfull_FasterRCNN_ordinary_step_001.pt',
 	# 'initialization':'xavier_init',
 	'batch_size':8,
 	'optimizer':'SGD',
@@ -51,14 +51,14 @@ config = {
 	# 	'steps':10,
 	# },
 	'device':'cuda' if torch.cuda.is_available() else 'cpu',
-	'validation_step':'ordinary_step',
+	'validation_step':'iou_step',
 	# 'attacked_step':'attacked_step'
 }
 
 m = detector().to(config['device'])
 
-# if 'checkpoint' in config:
-# 	m.load_state_dict({k:v for k,v in torch.load(config['checkpoint']).items() if k in m.state_dict()})
+if 'checkpoint' in config:
+	m.load_state_dict({k:v for k,v in torch.load(config['checkpoint']).items() if k in m.state_dict()})
 # if 'initialization' in config:
 # 	m.apply(vars(misc)[config['initialization']])
 
@@ -82,29 +82,29 @@ for k, v in config.items():
 	# 	config[k] = vars(torchattacks)[v](m, **config[k+'_config'])
 		
 
-for epoch in range(115):
-	if epoch > 0:
-		iterate.train(m,
-			train_loader = d_train_loader(config['batch_size']),
-			epoch = epoch,
-			writer = writer,
-			# atk = config['adversarial'],
-			**config
-		)
+for epoch in range(1,14):
+    # if epoch > 0:
+    # 	iterate.train(m,
+    # 		train_loader = d_train_loader(config['batch_size']),
+    # 		epoch = epoch,
+    # 		writer = writer,
+    # 		# atk = config['adversarial'],
+    # 		**config
+    # 	)
+    m.load_state_dict({k:v for k,v in torch.load(f'checkpoints/Aug28_23-50-39_Theseus_svhnfull_FasterRCNN_ordinary_step_{epoch:03}.pt').items() if k in m.state_dict()})
 
-	# iterate.attack(m,
-	# 	val_loader = val_loader,
-	# 	epoch = epoch,
-	# 	writer = writer,
-	# 	atk = config['attack'],
-	# 	**config
-	# )
+    iterate.validate(m,
+        val_loader = d_test_loader(config['batch_size']),
+        epoch = epoch,
+        writer = writer,
+        # atk = config['attack'],
+        **config
+    )
+    # torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
 
-	torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
+    print(m)
 
-print(m)
-
-# outputs = iterate.predict(m,
+    # outputs = iterate.predict(m,
 # 	steps.predict_step,
 # 	val_loader = val_loader,
 # 	**config
