@@ -12,7 +12,7 @@ config = {
 	'dataset':'svhnfull',
 	'training_step':'ordinary_step',
 	# 'z':6,
-	'checkpoint':'checkpoints/Aug28_23-50-39_Theseus_svhnfull_FasterRCNN_ordinary_step_001.pt',
+	# 'checkpoint':'checkpoints/Aug28_23-50-39_Theseus_svhnfull_FasterRCNN_ordinary_step_001.pt',
 	# 'initialization':'xavier_init',
 	'batch_size':8,
 	'optimizer':'SGD',
@@ -91,7 +91,7 @@ for epoch in range(1,14):
     # 		# atk = config['adversarial'],
     # 		**config
     # 	)
-    m.load_state_dict({k:v for k,v in torch.load(f'checkpoints/Aug28_23-50-39_Theseus_svhnfull_FasterRCNN_ordinary_step_{epoch:03}.pt').items() if k in m.state_dict()})
+    m.load_state_dict({k:v for k,v in torch.load(f'checkpoints/Aug31_17-31-09_Theseus_svhnfull_FasterRCNN_ordinary_step_{epoch:03}.pt').items() if k in m.state_dict()})
 
     iterate.validate(m,
         val_loader = d_test_loader(config['batch_size']),

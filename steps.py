@@ -6,7 +6,7 @@ import torchvision
 
 def ordinary_step(net, batch, batch_idx, **kw):
 	images, targets = batch
-	images = images.to(kw['device'])
+	images = [x.to(kw['device']) for x in images]
 	targets = [{k: v.to(kw['device']) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
 	loss_dict = net(images, targets)
 	loss = sum(loss for loss in loss_dict.values())
