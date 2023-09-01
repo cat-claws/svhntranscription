@@ -10,23 +10,29 @@ def ordinary_step(net, batch, batch_idx, **kw):
 	targets = [{k: v.to(kw['device']) if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
 	loss_dict = net(images, targets)
 	loss = sum(loss for loss in loss_dict.values())
-	return {'loss':loss}
+	return {'loss':loss * len(images)}
 
 
 def iou_step(net, batch, batch_idx, **kw):
 	images, targets = batch
-	images = images.to(kw['device'])
+	images = [x.to(kw['device']) for x in images]
 	targets = [{k: v.to('cpu') if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
 
 	outputs = net(images)
 	outputs = [{k: v.to('cpu') for k, v in t.items()} for t in outputs]
+
+	for p in outputs:
+		ind = p['scores'] > .5
+		p['boxes'] = p['boxes'][ind]
+		p['scores'] = p['scores'][ind]
+		p['labels'] = p['labels'][ind]
 
 	from torchmetrics.detection import MeanAveragePrecision
 	metric = MeanAveragePrecision(iou_type="bbox")
 	metric.update(outputs, targets)
 	# iou = sum([torchvision.ops.box_iou(o['boxes'], t['boxes']).max(dim=0).values.mean() for o, t in zip(outputs, targets)])
 
-	return metric.compute()
+	return {k:v*len(images) for k, v in metric.compute().items()}
 
 
 
