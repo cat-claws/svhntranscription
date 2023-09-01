@@ -69,7 +69,7 @@ for k, v in config.items():
 train_loader = d_train_loader(config['batch_size'])
 test_loader = d_test_loader(config['batch_size'])
 
-for epoch in range(115):
+for epoch in range(30):
 	if epoch > 0:
 		iterate.train(m,
 			train_loader = train_loader,
@@ -77,6 +77,8 @@ for epoch in range(115):
 			writer = writer,
 			**config
 		)
+
+	# m.load_state_dict({k:v for k,v in torch.load(f'checkpoints/Sep01_17-16-53_Theseus_svhnfull_FasterRCNN_ordinary_step_{epoch:03}.pt').items() if k in m.state_dict()})
 
 	iterate.validate(m,
         val_loader = test_loader,
