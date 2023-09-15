@@ -8,12 +8,18 @@ from utils import iterate
 
 from torch.utils.tensorboard import SummaryWriter
 
+import sys
+sys.path.insert(0, '../adversarial-attacks-pytorch/')
+sys.path.append('..')
+import torchattacks
+
+
 config = {
 	'dataset':'svhnfull',
 	'training_step':'ordinary_step',
-	# 'checkpoint':'checkpoints/ResNet18_cifar10_var_1000.pt',
+	# 'checkpoint':'checkpoints/Sep04_18-28-00_Theseus_svhnfull_FasterRCNN_ordinary_step_007.pt',
 	# 'initialization':'xavier_init',
-	'batch_size':16,
+	'batch_size':32,
 	'optimizer':'SGD',
 	'optimizer_config':{
 		'lr':0.005,
@@ -25,13 +31,15 @@ config = {
 		'step_size':3,
 		'gamma':0.1
 	},
-	# 'attack':'PGDL2',
-	# 'attack_config':{
-	# 	'eps':0.5, #PGD
-	# 	'alpha':0.2,
-	# 	'steps':40,
-	# 	'random_start':True,
-	# }
+	'attack':'Square_',
+	'attack_config':{
+		'eps':8/255,
+		'loss':'iou_',
+		'n_queries':5000
+		# 'alpha':0.2,
+		# 'steps':40,
+		# 'random_start':True,
+	},
 	# 'microbatch_size':10000,
 	# 'threshold':0.95,
 	# 'adversarial':'TPGD',
@@ -42,13 +50,13 @@ config = {
 	# },
 	'device':'cuda' if torch.cuda.is_available() else 'cpu',
 	'validation_step':'iou_step',
-	# 'attacked_step':'attacked_step'
+	'attacked_step':'iou_step'
 }
 
 m = detector().to(config['device'])
 
-# if 'checkpoint' in config:
-# 	m.load_state_dict({k:v for k,v in torch.load(config['checkpoint']).items() if k in m.state_dict()})
+if 'checkpoint' in config:
+	m.load_state_dict({k:v for k,v in torch.load(config['checkpoint']).items() if k in m.state_dict()})
 # if 'initialization' in config:
 # 	m.apply(vars(misc)[config['initialization']])
 
@@ -65,11 +73,13 @@ for k, v in config.items():
 	elif k == 'optimizer':
 		config[k] = vars(torch.optim)[v]([p for p in m.parameters() if p.requires_grad], **config[k+'_config'])
 		config['scheduler'] = vars(torch.optim.lr_scheduler)[config['scheduler']](config[k], **config['scheduler_config'])
+	elif k == 'adversarial' or k == 'attack':
+		config[k] = vars(torchattacks)[v](m, **config[k+'_config'])
 		
 train_loader = d_train_loader(config['batch_size'])
 test_loader = d_test_loader(config['batch_size'])
 
-for epoch in range(30):
+for epoch in range(5):
 	if epoch > 0:
 		iterate.train(m,
 			train_loader = train_loader,
@@ -80,20 +90,22 @@ for epoch in range(30):
 
 	# m.load_state_dict({k:v for k,v in torch.load(f'checkpoints/Sep01_17-16-53_Theseus_svhnfull_FasterRCNN_ordinary_step_{epoch:03}.pt').items() if k in m.state_dict()})
 
-	iterate.validate(m,
-        val_loader = test_loader,
-        epoch = epoch,
-        writer = writer,
-        **config
-    )
+	if epoch < 10:
+		iterate.validate(m,
+			val_loader = test_loader,
+			epoch = epoch,
+			writer = writer,
+			**config
+		)
 
-	# iterate.attack(m,
-	# 	val_loader = val_loader,
-	# 	epoch = epoch,
-	# 	writer = writer,
-	# 	atk = config['attack'],
-	# 	**config
-	# )
+	else:
+		iterate.attack(m,
+			val_loader = test_loader,
+			epoch = epoch,
+			writer = writer,
+			atk = config['attack'],
+			**config
+		)
 
 	torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
 

@@ -12,6 +12,7 @@ def ordinary_step(net, batch, batch_idx, **kw):
 	loss = sum(loss for loss in loss_dict.values())
 	return {'loss':loss * len(images)}
 
+from torchmetrics.detection import MeanAveragePrecision
 
 def iou_step(net, batch, batch_idx, **kw):
 	images, targets = batch
@@ -27,13 +28,29 @@ def iou_step(net, batch, batch_idx, **kw):
 		p['scores'] = p['scores'][ind]
 		p['labels'] = p['labels'][ind]
 
-	from torchmetrics.detection import MeanAveragePrecision
-	metric = MeanAveragePrecision(iou_type="bbox")
-	metric.update(outputs, targets)
-	# iou = sum([torchvision.ops.box_iou(o['boxes'], t['boxes']).max(dim=0).values.mean() for o, t in zip(outputs, targets)])
+	metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5], rec_thresholds=[0.5])
+	mAP = metric.forward(outputs, targets)['map_50'] * len(images)
 
-	return {k:v*len(images) for k, v in metric.compute().items()}
+	return {'mAP50':mAP}
 
+def attacked_step(net, batch, batch_idx, **kw):
+	images, targets = batch
+	images = [x.to(kw['device']) for x in images]
+	targets = [{k: v.to('cpu') if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+
+	outputs = net(images)
+	outputs = [{k: v.to('cpu') for k, v in t.items()} for t in outputs]
+
+	for p in outputs:
+		ind = p['scores'] > .5
+		p['boxes'] = p['boxes'][ind]
+		p['scores'] = p['scores'][ind]
+		p['labels'] = p['labels'][ind]
+
+	metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5], rec_thresholds=[0.5])
+	mAP = metric.forward(outputs, targets)['map_50']
+
+	return {'mAP50':mAP}
 
 
 def rand_step(net, batch, batch_idx, **kw):
@@ -198,17 +215,6 @@ def tradesplus_step(net, batch, batch_idx, **kw):
 	return {'loss':loss, 'correct':correct, 'augmented':augmented_accuracy, 'quantile':quantile_accuracy, 'mu':mu.sum(), 'sigma':sigma.sum()}
 
 
-def attacked_step(net, batch, batch_idx, **kw):
-	inputs, labels = batch
-	inputs, labels = inputs.to(kw['device']), labels.to(kw['device'])
-	inputs_ = kw['atk'](inputs, labels)
-
-	scores = net(inputs_)
-	loss = F.cross_entropy(scores, labels, reduction = 'sum')
-
-	max_scores, max_labels = scores.max(1)
-	correct = (max_labels == labels).sum()
-	return {'loss':loss, 'correct':correct}
 
 
 def trades_step(net, batch, batch_idx, **kw):

@@ -48,8 +48,8 @@ def attack(net, validation_step, attacked_step, val_loader, **kw):
 			outputs.append({k:v.detach().cpu() for k, v in output.items()})
 			for k, v in output.items():
 				kw['writer'].add_scalar("Step-" + k + "-valid", v / kw['batch_size'], kw['epoch'] * len(val_loader) + batch_idx)
-
-		output_ = attacked_step(net, batch, batch_idx, **kw)
+		with torch.autocast(kw['device']):
+			output_ = attacked_step(net, batch, batch_idx, **kw)
 		outputs_.append({k:v.detach().cpu() for k, v in output_.items()})
 		for k, v in output.items():
 			kw['writer'].add_scalar("Step-" + k + "-attack", v / kw['batch_size'], kw['epoch'] * len(val_loader) + batch_idx)
