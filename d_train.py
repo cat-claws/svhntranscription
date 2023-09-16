@@ -19,7 +19,7 @@ config = {
 	'training_step':'ordinary_step',
 	# 'checkpoint':'checkpoints/Sep04_18-28-00_Theseus_svhnfull_FasterRCNN_ordinary_step_007.pt',
 	# 'initialization':'xavier_init',
-	'batch_size':32,
+	'batch_size':256,
 	'optimizer':'SGD',
 	'optimizer_config':{
 		'lr':0.005,
@@ -35,7 +35,7 @@ config = {
 	'attack_config':{
 		'eps':8/255,
 		'loss':'iou_',
-		'n_queries':5000
+		'n_queries':20
 		# 'alpha':0.2,
 		# 'steps':40,
 		# 'random_start':True,
@@ -50,7 +50,7 @@ config = {
 	# },
 	'device':'cuda' if torch.cuda.is_available() else 'cpu',
 	'validation_step':'iou_step',
-	'attacked_step':'iou_step'
+	'attacked_step':'attacked_step'
 }
 
 m = detector().to(config['device'])
@@ -79,18 +79,22 @@ for k, v in config.items():
 train_loader = d_train_loader(config['batch_size'])
 test_loader = d_test_loader(config['batch_size'])
 
-for epoch in range(5):
-	if epoch > 0:
-		iterate.train(m,
-			train_loader = train_loader,
-			epoch = epoch,
-			writer = writer,
-			**config
-		)
+# for epoch in range(10):
+import os
+for epoch, ckpt in enumerate(os.listdir('checkpoints_')):
+	# if epoch > 0:
+	# 	iterate.train(m,
+	# 		train_loader = train_loader,
+	# 		epoch = epoch,
+	# 		writer = writer,
+	# 		**config
+	# 	)
 
-	# m.load_state_dict({k:v for k,v in torch.load(f'checkpoints/Sep01_17-16-53_Theseus_svhnfull_FasterRCNN_ordinary_step_{epoch:03}.pt').items() if k in m.state_dict()})
+	# m.load_state_dict({k:v for k,v in torch.load(f'checkpoints_/Sep05_23-18-24_Theseus_svhnfull_FasterRCNN_ordinary_step_293.pt').items() if k in m.state_dict()})
+	m.load_state_dict({k:v for k,v in torch.load('checkpoints_/' + ckpt).items() if k in m.state_dict()})
+	print(ckpt)
 
-	if epoch < 10:
+	if epoch < 0:
 		iterate.validate(m,
 			val_loader = test_loader,
 			epoch = epoch,

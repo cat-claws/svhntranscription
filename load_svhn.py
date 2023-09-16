@@ -33,5 +33,5 @@ def collate(e):
     ]
     return images, targets
 
-d_train_loader = lambda x: torch.utils.data.DataLoader(svhn_full['train'].shard(2, 0).with_transform(transforms), batch_size=x, collate_fn = collate, num_workers = 4, shuffle = True)
+d_train_loader = lambda x: torch.utils.data.DataLoader(svhn_full['train'].with_transform(transforms), batch_size=x, collate_fn = collate, num_workers = 4, shuffle = True)
 d_test_loader = lambda x: torch.utils.data.DataLoader(svhn_full['test'].with_transform(transforms), batch_size=x, collate_fn = collate, num_workers = 4)

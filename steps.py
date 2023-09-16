@@ -35,11 +35,14 @@ def iou_step(net, batch, batch_idx, **kw):
 
 def attacked_step(net, batch, batch_idx, **kw):
 	images, targets = batch
-	images = [x.to(kw['device']) for x in images]
+	images = torch.stack(images).to(kw['device'])
 	targets = [{k: v.to('cpu') if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
 
-	outputs = net(images)
-	outputs = [{k: v.to('cpu') for k, v in t.items()} for t in outputs]
+	labels = torch.nn.utils.rnn.pad_sequence([t['boxes'] for t in targets], batch_first = True)
+	inputs_ = kw['atk'](images, labels).detach()
+	
+	outputs = net(inputs_)
+	outputs = [{k: v.detach().to('cpu') for k, v in t.items()} for t in outputs]
 
 	for p in outputs:
 		ind = p['scores'] > .5
@@ -47,8 +50,9 @@ def attacked_step(net, batch, batch_idx, **kw):
 		p['scores'] = p['scores'][ind]
 		p['labels'] = p['labels'][ind]
 
-	metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5], rec_thresholds=[0.5])
-	mAP = metric.forward(outputs, targets)['map_50']
+	with torch.no_grad():
+		metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5], rec_thresholds=[0.5])
+		mAP = metric.forward(outputs, targets)['map_50'] * len(images)
 
 	return {'mAP50':mAP}
 
