@@ -41,14 +41,6 @@ config = {
 		# 'steps':40,
 		# 'random_start':True,
 	},
-	# 'microbatch_size':10000,
-	# 'threshold':0.95,
-	# 'adversarial':'TPGD',
-	# 'adversarial_config':{
-	# 	'eps':8/255,
-	# 	'alpha':2/255,
-	# 	'steps':10,
-	# },
 	'device':'cuda' if torch.cuda.is_available() else 'cpu',
 	'validation_step':'iou_step',
 	'attacked_step':'iou_step'
@@ -121,12 +113,6 @@ for epoch, c in enumerate(checkpoints):
 
 print(m)
 
-# outputs = iterate.predict(m,
-# 	steps.predict_step,
-# 	val_loader = val_loader,
-# 	**config
-# )
 
-# print(outputs.keys(), outputs['predictions'])
 writer.flush()
 writer.close()
