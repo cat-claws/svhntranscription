@@ -33,5 +33,45 @@ def collate(e):
     ]
     return images, targets
 
-d_train_loader = lambda x: torch.utils.data.DataLoader(svhn_full['train'].with_transform(transforms), batch_size=x, collate_fn = collate, num_workers = 4, shuffle = True)
-d_test_loader = lambda x: torch.utils.data.DataLoader(svhn_full['test'].with_transform(transforms), batch_size=x, collate_fn = collate, num_workers = 4)
+d_train_loader = lambda x: torch.utils.data.DataLoader(
+    svhn_full['train'].with_transform(transforms),
+    batch_size=x,
+    collate_fn = collate,
+    num_workers = 4,
+    shuffle = True
+)
+
+d_test_loader = lambda x: torch.utils.data.DataLoader(
+    svhn_full['test'].with_transform(transforms),
+    batch_size=x,
+    collate_fn = collate,
+    num_workers = 4
+)
+
+
+from torchvision import datasets
+
+T_1 = T.Compose([
+    T.ToImageTensor(),
+    T.ConvertImageDtype(),
+    ])
+
+T_2 = T.Compose([
+    T.RandomCrop(32, padding=4),
+    T.RandomHorizontalFlip(),
+    T_1
+    ])
+
+c_train_loader = lambda x: torch.utils.data.DataLoader(
+    datasets.SVHN('SVHN', download=True, split = 'train', transform=T_2),
+    batch_size=x,
+    # collate_fn = collate,
+    num_workers = 4
+)
+
+c_test_loader = lambda x: torch.utils.data.DataLoader(
+    datasets.SVHN('SVHN', download=True, split = 'test', transform=T_1),
+    batch_size=x,
+    # collate_fn = collate,
+    num_workers = 4
+)
