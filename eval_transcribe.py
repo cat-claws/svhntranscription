@@ -1,7 +1,7 @@
 import torch
 
 import steps
-from load_svhn import c_train_loader, c_test_loader
+from load_svhn import d_test_loader
 from utils import iterate
 
 
@@ -14,42 +14,42 @@ import torchattacks
 
 
 config = {
-	'dataset':'svhn',
-	'training_step':'c_step',
+	'dataset':'svhnfull',
+	'training_step':'transcribe_eval_step',
 	# 'checkpoint':'checkpoints/Sep04_18-28-00_Theseus_svhnfull_FasterRCNN_ordinary_step_007.pt',
 	# 'initialization':'xavier_init',
-	'batch_size':32,
-	'optimizer':'Adadelta',
-	'optimizer_config':{
-		# 'lr':0.005,
-		# 'momentum':0.9,
-		# 'weight_decay':0.0005,
-	},
-	'scheduler':'StepLR',
-	'scheduler_config':{
-		'step_size':100,
-		'gamma':0.1
-	},
+	'batch_size':256,
+	# 'optimizer':'SGD',
+	# 'optimizer_config':{
+	# 	'lr':0.005,
+	# 	'momentum':0.9,
+	# 	'weight_decay':0.0005,
+	# },
+	# 'scheduler':'StepLR',
+	# 'scheduler_config':{
+	# 	'step_size':3,
+	# 	'gamma':0.1
+	# },
 	'attack':'Square_',
 	'attack_config':{
 		'eps':8/255,
-		'loss':'ce',
-		'n_queries':10
+		'loss':'sim',
+		'n_queries':20
 		# 'alpha':0.2,
 		# 'steps':40,
 		# 'random_start':True,
 	},
 	'device':'cuda' if torch.cuda.is_available() else 'cpu',
-	'validation_step':'c_step',
-	'attacked_step':'attacked_c_step'
+	'validation_step':'transcribe_eval_step',
+	'attacked_step':'attacked_transcribe_step'
 }
 
-m = torch.hub.load('cat-claws/nn', 'resnet_cifar', pretrained= False, num_classes=10, blocks=14, bottleneck=False).to(config['device'])
+from transcriber import Transcriber
+m  = Transcriber().to(config['device'])
 
 if 'checkpoint' in config:
 	m.load_state_dict({k:v for k,v in torch.load(config['checkpoint']).items() if k in m.state_dict()})
-# if 'initialization' in config:
-# 	m.apply(vars(misc)[config['initialization']])
+
 
 writer = SummaryWriter(comment = f"_{config['dataset']}_{m._get_name()}_{config['training_step']}", flush_secs=10)
 
@@ -67,42 +67,39 @@ for k, v in config.items():
 	elif k == 'adversarial' or k == 'attack':
 		config[k] = vars(torchattacks)[v](m, **config[k+'_config'])
 		
-train_loader = c_train_loader(config['batch_size'])
-test_loader = c_test_loader(config['batch_size'])
+test_loader = d_test_loader(config['batch_size'])
 
+# for epoch in range(10):
 import os
-for epoch, ckpt in enumerate(sorted(os.listdir('checkpoints_c'))):
-# for epoch in range(100):
-	if epoch < 0:
-		iterate.train(m,
-			train_loader = train_loader,
-			epoch = epoch,
-			writer = writer,
-			**config
-		)
+epoch = 0
+for ckpt_d in sorted(os.listdir('checkpoints_d'))[::4]:
 
-	# m.load_state_dict({k:v for k,v in torch.load(f'checkpoints_/Sep05_23-18-24_Theseus_svhnfull_FasterRCNN_ordinary_step_293.pt').items() if k in m.state_dict()})
-	m.load_state_dict({k:v for k,v in torch.load('checkpoints_c/' + ckpt).items() if k in m.state_dict()})
-	print(epoch, ckpt)
+	m.detector.load_state_dict({k:v for k,v in torch.load(f'checkpoints_d/' + ckpt_d).items() if k in m.detector.state_dict()})
+	
+	for ckpt_c in sorted(os.listdir('checkpoints_c'))[::8]:
+		m.classifier.load_state_dict({k:v for k,v in torch.load('checkpoints_c/' + ckpt_c).items() if k in m.classifier.state_dict()})
+		print(epoch, ckpt_d, ckpt_c, '\n', sep = '\n')
 
-	if epoch < 0:
-		iterate.validate(m,
-			val_loader = test_loader,
-			epoch = epoch,
-			writer = writer,
-			**config
-		)
+		if epoch > 5000:
+			iterate.validate(m,
+				val_loader = test_loader,
+				epoch = epoch,
+				writer = writer,
+				**config
+			)
 
-	else:
-		iterate.attack(m,
-			val_loader = test_loader,
-			epoch = epoch,
-			writer = writer,
-			atk = config['attack'],
-			**config
-		)
+		else:
+			iterate.attack(m,
+				val_loader = test_loader,
+				epoch = epoch,
+				writer = writer,
+				atk = config['attack'],
+				**config
+			)
 
-	torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
+		epoch += 1
+
+    # torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
 
 print(m)
 

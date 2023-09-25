@@ -1,6 +1,5 @@
 import torch
 
-from model_d import detector
 import steps
 from load_svhn import d_train_loader, d_test_loader
 from utils import iterate
@@ -16,7 +15,7 @@ import torchattacks
 
 config = {
 	'dataset':'svhnfull',
-	'training_step':'ordinary_step',
+	'training_step':'d_step',
 	# 'checkpoint':'checkpoints/Sep04_18-28-00_Theseus_svhnfull_FasterRCNN_ordinary_step_007.pt',
 	# 'initialization':'xavier_init',
 	'batch_size':256,
@@ -40,20 +39,15 @@ config = {
 		# 'steps':40,
 		# 'random_start':True,
 	},
-	# 'microbatch_size':10000,
-	# 'threshold':0.95,
-	# 'adversarial':'TPGD',
-	# 'adversarial_config':{
-	# 	'eps':8/255,
-	# 	'alpha':2/255,
-	# 	'steps':10,
-	# },
 	'device':'cuda' if torch.cuda.is_available() else 'cpu',
 	'validation_step':'iou_step',
-	'attacked_step':'attacked_step'
+	'attacked_step':'attacked_iou_step'
 }
 
-m = detector().to(config['device'])
+import torchvision
+m = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(weights = 'DEFAULT').to(config['device'])
+m.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(m.roi_heads.box_predictor.cls_score.in_features, num_classes = 2).to(config['device'])
+
 
 if 'checkpoint' in config:
 	m.load_state_dict({k:v for k,v in torch.load(config['checkpoint']).items() if k in m.state_dict()})
@@ -81,18 +75,18 @@ test_loader = d_test_loader(config['batch_size'])
 
 # for epoch in range(10):
 import os
-for epoch, ckpt in enumerate(os.listdir('checkpoints_')):
-	# if epoch > 0:
-	# 	iterate.train(m,
-	# 		train_loader = train_loader,
-	# 		epoch = epoch,
-	# 		writer = writer,
-	# 		**config
-	# 	)
+for epoch, ckpt in enumerate(sorted(os.listdir('checkpoints_d'))):
+	if epoch < 0:
+		iterate.train(m,
+			train_loader = train_loader,
+			epoch = epoch,
+			writer = writer,
+			**config
+		)
 
 	# m.load_state_dict({k:v for k,v in torch.load(f'checkpoints_/Sep05_23-18-24_Theseus_svhnfull_FasterRCNN_ordinary_step_293.pt').items() if k in m.state_dict()})
-	m.load_state_dict({k:v for k,v in torch.load('checkpoints_/' + ckpt).items() if k in m.state_dict()})
-	print(ckpt)
+	m.load_state_dict({k:v for k,v in torch.load('checkpoints_d/' + ckpt).items() if k in m.state_dict()})
+	print(epoch, ckpt)
 
 	if epoch < 0:
 		iterate.validate(m,

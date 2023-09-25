@@ -78,3 +78,40 @@ def attacked_c_step(net, batch, batch_idx, **kw):
 	max_scores, max_labels = scores.max(1)
 	correct = (max_labels == labels).sum()
 	return {'loss':loss, 'correct':correct}
+
+from soft_editdistance import similarity_from_edit_distance, soft_similarity_from_edit_distance
+
+def transcribe_eval_step(net, batch, batch_idx, **kw):
+	images, targets = batch
+	images = [x.to(kw['device']) for x in images]
+	targets = [{k: v.to('cpu') if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+
+	outputs = net(images)
+
+	preds = [''.join(map(str, t.tolist())) for t in outputs.predictions]
+	labels = [''.join(map(str, t['string'].tolist())) for t in targets]
+
+	# soft = [soft_similarity_from_edit_distance(s1_probs.softmax(-1), s2['string']) for s1_probs, s2 in zip(outputs.logits, targets)]
+
+	edit = torch.tensor([similarity_from_edit_distance(s1, s2) for s1, s2 in zip(preds, labels)]).sum(0)
+	
+	return {'distance':edit[0], 'similarity':edit[1]}
+
+def attacked_transcribe_step(net, batch, batch_idx, **kw):
+	images, targets = batch
+	images = torch.stack(images).to(kw['device'])
+	targets = [{k: v.to('cpu') if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+
+	labels = torch.nn.utils.rnn.pad_sequence([t['string'] for t in targets], batch_first = True, padding_value=10000)
+	inputs_ = kw['atk'](images, labels).detach()
+	
+	outputs = net(inputs_)
+
+	preds = [''.join(map(str, t.tolist())) for t in outputs.predictions]
+	labels = [''.join(map(str, t['string'].tolist())) for t in targets]
+
+	# soft = [soft_similarity_from_edit_distance(s1_probs.softmax(-1), s2['string']) for s1_probs, s2 in zip(outputs.logits, targets)]
+
+	edit = torch.tensor([similarity_from_edit_distance(s1, s2) for s1, s2 in zip(preds, labels)]).sum(0)
+	
+	return {'distance':edit[0], 'similarity':edit[1]}

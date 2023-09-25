@@ -1,9 +1,6 @@
 _*
 _*/*
 runs/*
-checkpoints/*
-checkpoints_/
+check*/*
 .ipy*/*
 SVHN/*
-checkpoints2/*
-checkpoints2_/*

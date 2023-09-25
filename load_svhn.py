@@ -29,13 +29,17 @@ def collate(e):
     # {k: [d[k] for d in e] for k in e[0]}
     images = [d.pop('image') for d in e]
     targets = [
-        {'boxes':d['digits']['bbox'].float(), 'labels':torch.tensor(d['digits']['label']).fill_(1).long()} for d in e
+        {
+            'boxes':d['digits']['bbox'].float(),
+            'labels':torch.tensor(d['digits']['label']).fill_(1).long(), 
+            'string':torch.tensor(d['digits']['label']).long()
+        } for d in e
     ]
     return images, targets
 
 d_train_loader = lambda x: torch.utils.data.DataLoader(
     svhn_full['train'].with_transform(transforms),
-    batch_size=x,
+    batch_size = x,
     collate_fn = collate,
     num_workers = 4,
     shuffle = True
@@ -43,7 +47,7 @@ d_train_loader = lambda x: torch.utils.data.DataLoader(
 
 d_test_loader = lambda x: torch.utils.data.DataLoader(
     svhn_full['test'].with_transform(transforms),
-    batch_size=x,
+    batch_size = x,
     collate_fn = collate,
     num_workers = 4
 )
@@ -65,13 +69,11 @@ T_2 = T.Compose([
 c_train_loader = lambda x: torch.utils.data.DataLoader(
     datasets.SVHN('SVHN', download=True, split = 'train', transform=T_2),
     batch_size=x,
-    # collate_fn = collate,
     num_workers = 4
 )
 
 c_test_loader = lambda x: torch.utils.data.DataLoader(
     datasets.SVHN('SVHN', download=True, split = 'test', transform=T_1),
     batch_size=x,
-    # collate_fn = collate,
     num_workers = 4
 )

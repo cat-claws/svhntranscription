@@ -1,17 +1,9 @@
 import torch
 torch.multiprocessing.set_sharing_strategy('file_system')
 
-from model_d import detector
 import steps
 from load_svhn import c_test_loader, T_1
 from torchvision import datasets
-
-c_train_loader = lambda x: torch.utils.data.DataLoader(
-    torch.utils.data.random_split(datasets.SVHN('SVHN', download=True, split = 'test', transform=T_1), [1, 10])[0],
-    batch_size=x,
-    # collate_fn = collate,
-    num_workers = 4
-)
 
 from utils import iterate
 
@@ -29,7 +21,7 @@ config = {
 	'training_step':'c_step',
 	# 'checkpoint':'checkpoints/Sep04_18-28-00_Theseus_svhnfull_FasterRCNN_ordinary_step_007.pt',
 	# 'initialization':'xavier_init',
-	'batch_size':128,
+	'batch_size':256,
 	'optimizer':'SGD',
 	'optimizer_config':{
 		'lr':0.0005,
@@ -78,8 +70,8 @@ for k, v in config.items():
 	elif k == 'adversarial' or k == 'attack':
 		config[k] = vars(torchattacks)[v](m, **config[k+'_config'])
 		
-train_loader = d_train_loader(config['batch_size'])
-test_loader = d_test_loader(config['batch_size'])
+# train_loader = d_train_loader(config['batch_size'])
+test_loader = c_test_loader(config['batch_size'])
 
 import os
 checkpoints = ['checkpoints2/' + x for x in os.listdir('checkpoints2') if x.startswith('S')]
@@ -87,38 +79,43 @@ checkpoints = ['checkpoints2/' + x for x in os.listdir('checkpoints2') if x.star
 import random
 
 for epoch, c in enumerate(checkpoints):
-    m.load_state_dict(torch.load(c))
+	# if epoch < 51:
+	# 	continue
 
-    for j in range(200):
-        x = random.randint(1, 99)
-        train_loader = torch.utils.data.DataLoader(svhn_full['test'].with_transform(transforms).shard(100, x), batch_size=config['batch_size'], collate_fn = collate, num_workers = 4)
+	m.load_state_dict(torch.load(c))
 
-        iterate.train(m,
-            train_loader = train_loader,
-            epoch = epoch,
-            writer = writer,
-            **config
-        )
+	for j in range(250):
 
-        # m.load_state_dict({k:v for k,v in torch.load(f'checkpoints/Sep01_17-16-53_Theseus_svhnfull_FasterRCNN_ordinary_step_{epoch:03}.pt').items() if k in m.state_dict()})
+		train_loader = torch.utils.data.DataLoader(
+			torch.utils.data.random_split(datasets.SVHN('SVHN', download=True, split = 'test', transform=T_1), [532, 25500])[0],
+			batch_size=config['batch_size'],
+			num_workers = 4
+		)
 
-        m.eval()
-        outputs = []
-        with torch.no_grad():
-            for batch_idx, batch in enumerate(test_loader):
-                output = config['validation_step'](m, batch, batch_idx, **config)
-                outputs.append({k:v.detach().cpu() for k, v in output.items()})
+		iterate.train(m,
+			train_loader = train_loader,
+			epoch = epoch,
+			writer = writer,
+			**config
+		)
 
-        outputs = {k: sum([dic[k] for dic in outputs]) / len(test_loader.dataset) for k in outputs[0]}
-        print(c, outputs['correct'].item())
-        if outputs['correct'] > 0.948:
-            if outputs['correct'] < 0.949:
-                torch.save(m.state_dict(), "checkpoints2_/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
+		m.eval()
+		outputs = []
+		with torch.no_grad():
+			for batch_idx, batch in enumerate(test_loader):
+				output = config['validation_step'](m, batch, batch_idx, **config)
+				outputs.append({k:v.detach().cpu() for k, v in output.items()})
 
-            break
+		outputs = {k: sum([dic[k] for dic in outputs]) / len(test_loader.dataset) for k in outputs[0]}
+		print(c, outputs['correct'].item())
+		if outputs['correct'] > 0.948:
+			if outputs['correct'] < 0.949:
+				torch.save(m.state_dict(), "checkpoints2_/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
 
-        if outputs['correct'] < 0.8:
-            break
+			break
+
+		if outputs['correct'] < 0.8:
+			break
 
 print(m)
 
