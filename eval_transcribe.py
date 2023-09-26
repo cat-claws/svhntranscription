@@ -72,11 +72,11 @@ test_loader = d_test_loader(config['batch_size'])
 # for epoch in range(10):
 import os
 epoch = 0
-for ckpt_d in sorted(os.listdir('checkpoints_d'))[::4]:
+for ckpt_d in sorted(os.listdir('checkpoints_d'))[::8]:
 
 	m.detector.load_state_dict({k:v for k,v in torch.load(f'checkpoints_d/' + ckpt_d).items() if k in m.detector.state_dict()})
 	
-	for ckpt_c in sorted(os.listdir('checkpoints_c'))[::8]:
+	for ckpt_c in sorted(os.listdir('checkpoints_c'))[::16]:
 		m.classifier.load_state_dict({k:v for k,v in torch.load('checkpoints_c/' + ckpt_c).items() if k in m.classifier.state_dict()})
 		print(epoch, ckpt_d, ckpt_c, '\n', sep = '\n')
 
