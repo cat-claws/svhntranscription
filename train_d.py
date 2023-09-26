@@ -34,7 +34,7 @@ config = {
 	'attack_config':{
 		'eps':8/255,
 		'loss':'iou_',
-		'n_queries':20
+		'n_queries':100
 		# 'alpha':0.2,
 		# 'steps':40,
 		# 'random_start':True,
@@ -75,7 +75,7 @@ test_loader = d_test_loader(config['batch_size'])
 
 # for epoch in range(10):
 import os
-for epoch, ckpt in enumerate(sorted(os.listdir('checkpoints_d'))):
+for epoch, ckpt in enumerate(sorted(os.listdir('checkpoints_d'))[::8]):
 	if epoch < 0:
 		iterate.train(m,
 			train_loader = train_loader,
