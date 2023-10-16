@@ -14,13 +14,13 @@ def d_step(net, batch, batch_idx, **kw):
 
 from torchmetrics.detection import MeanAveragePrecision
 
-def iou_step(net, batch, batch_idx, **kw):
+def map_step(net, batch, batch_idx, **kw):
 	images, targets = batch
 	images = [x.to(kw['device']) for x in images]
-	targets = [{k: v.to('cpu') if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
+	# targets = [{k: v.to('cpu') if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
 
 	outputs = net(images)
-	outputs = [{k: v.to('cpu') for k, v in t.items()} for t in outputs]
+	outputs = [{k: v.detach().to('cpu') for k, v in t.items()} for t in outputs]
 
 	for p in outputs:
 		ind = p['scores'] > .5
@@ -33,15 +33,19 @@ def iou_step(net, batch, batch_idx, **kw):
 
 	return {'mAP50':mAP}
 
-def attacked_iou_step(net, batch, batch_idx, **kw):
-	images, targets = batch
-	images = torch.stack(images).to(kw['device'])
-	targets = [{k: v.to('cpu') if isinstance(v, torch.Tensor) else v for k, v in t.items()} for t in targets]
-
-	labels = torch.nn.utils.rnn.pad_sequence([t['boxes'] for t in targets], batch_first = True)
-	inputs_ = kw['atk'](images, labels).detach()
+def _iou_calculate_step(images, model, labels):
+	outputs = model(images)
+	boxes = [p['boxes'][p['scores'] > .5] for p in outputs]
 	
-	outputs = net(inputs_)
+	return torch.stack([
+		torch.cat((torchvision.ops.box_iou(b, l).flatten(), torch.tensor([0], device = b.device))).max() for b, l in zip(boxes, labels)
+	]) - 0.4
+
+def attacked_map_step(net, batch, batch_idx, **kw):
+	images, targets = batch
+	images_ = kw['attack'](torch.stack(images).to(kw['device']), _iou_calculate_step, labels = [t['boxes'].to(kw['device']) for t in targets], model = net, **kw['attack_config']).detach()
+	
+	outputs = net(images_)
 	outputs = [{k: v.detach().to('cpu') for k, v in t.items()} for t in outputs]
 
 	for p in outputs:

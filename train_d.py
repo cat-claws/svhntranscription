@@ -1,120 +1,126 @@
 import torch
-
-import steps
-from load_svhn import d_train_loader, d_test_loader
-from utils import iterate
-
-
-from torch.utils.tensorboard import SummaryWriter
-
-import sys
-sys.path.insert(0, '../adversarial-attacks-pytorch/')
-sys.path.append('..')
-import torchattacks
-
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 config = {
 	'dataset':'svhnfull',
-	'training_step':'d_step',
-	# 'checkpoint':'checkpoints/Sep04_18-28-00_Theseus_svhnfull_FasterRCNN_ordinary_step_007.pt',
-	# 'initialization':'xavier_init',
-	'batch_size':256,
+	'training_step':'steps.d_step',
+	'batch_size':32,
 	'optimizer':'SGD',
 	'optimizer_config':{
 		'lr':0.005,
 		'momentum':0.9,
-		'weight_decay':0.0005,
+		'weight_decay':5e-4,
 	},
 	'scheduler':'StepLR',
 	'scheduler_config':{
-		'step_size':3,
+		'step_size':5,
 		'gamma':0.1
 	},
-	'attack':'Square_',
+	'attack':'square_attack',
 	'attack_config':{
 		'eps':8/255,
-		'loss':'iou_',
+		# 'loss':'iou_',
 		'n_queries':100
 		# 'alpha':0.2,
 		# 'steps':40,
 		# 'random_start':True,
 	},
 	'device':'cuda' if torch.cuda.is_available() else 'cpu',
-	'validation_step':'iou_step',
-	'attacked_step':'attacked_iou_step'
+	'validation_step':'steps.map_step',
+	'attacked_step':'steps.attacked_map_step'
 }
 
-import torchvision
-m = torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn(weights = 'DEFAULT').to(config['device'])
-m.roi_heads.box_predictor = torchvision.models.detection.faster_rcnn.FastRCNNPredictor(m.roi_heads.box_predictor.cls_score.in_features, num_classes = 2).to(config['device'])
+def main(config):
+
+	from torchiteration import train, attack, validate
+	m = torch.hub.load('cat-claws/nn', 'fasterrcnn', num_classes = 2).to(config['device'])
+
+	import steps
+	from torch.utils.tensorboard import SummaryWriter
+	writer = SummaryWriter(comment = f"_{config['dataset']}_{m._get_name()}_{config['training_step']}", flush_secs=10)
+
+	import sys
+	sys.path.insert(0, '..')#adversarial-attacks-pytorch/')
+	from square_attack import square_attack
+
+	for k, v in config.items():
+		if k.endswith('_step'):
+			config[k] = eval(v)
+		elif k == 'optimizer':
+			config[k] = vars(torch.optim)[v]([p for p in m.parameters() if p.requires_grad], **config[k+'_config'])
+			config['scheduler'] = vars(torch.optim.lr_scheduler)[config['scheduler']](config[k], **config['scheduler_config'])
+		elif k == 'adversarial' or k == 'attack':
+			config[k] = eval(v)
+
+	from datasets import load_dataset
+	svhn_full = load_dataset('svhn', 'full_numbers')
+
+	import numpy as np
+	import torchvision.transforms.v2 as T
+	from torchvision.ops import box_convert
+
+	T_ = T.Compose([
+		T.Resize((112, 112)),
+		T.ToImageTensor(),
+		T.ConvertImageDtype(),
+	])
+
+	def transforms(e):
+		for d, x in zip(e['digits'], e['image']):
+			d['bbox'] = d['bbox'] * np.tile(np.array((112, 112)) / x.size, 2)
+			d['bbox'] = box_convert(torch.tensor(d['bbox']), 'xywh', 'xyxy')
+		e['image'] = T_(e['image'])
+		return e
+
+	def collate(e):
+		# {k: [d[k] for d in e] for k in e[0]}
+		images = [d.pop('image') for d in e]
+		targets = [
+			{
+				'boxes':d['digits']['bbox'].float(),
+				'labels':torch.tensor(d['digits']['label']).fill_(1).long(), 
+				'string':torch.tensor(d['digits']['label']).long()
+			} for d in e
+		]
+		return images, targets
+
+	train_loader = torch.utils.data.DataLoader(svhn_full['train'].with_transform(transforms), batch_size = config['batch_size'], collate_fn = collate, num_workers = 4, shuffle = True)
+	test_loader = torch.utils.data.DataLoader(svhn_full['test'].with_transform(transforms), batch_size = config['batch_size'], collate_fn = collate, num_workers = 4)
 
 
-if 'checkpoint' in config:
-	m.load_state_dict({k:v for k,v in torch.load(config['checkpoint']).items() if k in m.state_dict()})
-# if 'initialization' in config:
-# 	m.apply(vars(misc)[config['initialization']])
 
-writer = SummaryWriter(comment = f"_{config['dataset']}_{m._get_name()}_{config['training_step']}", flush_secs=10)
+	for epoch in range(20):
+		if epoch > 0:
+			train(m,
+				train_loader = train_loader,
+				epoch = epoch,
+				writer = writer,
+				**config
+			)
 
-import json
-with open("checkpoints/configs.json", 'a') as f:
-	f.write(json.dumps({**{'run':writer.log_dir.split('/')[-1]}, **config}) + '\n')
-	print(json.dumps(config, indent=4))
+		if epoch < 2:
+			validate(m,
+				val_loader = test_loader,
+				epoch = epoch,
+				writer = writer,
+				**config
+			)
 
-for k, v in config.items():
-	if k.endswith('_step'):
-		config[k] = vars(steps)[v]
-	elif k == 'optimizer':
-		config[k] = vars(torch.optim)[v]([p for p in m.parameters() if p.requires_grad], **config[k+'_config'])
-		config['scheduler'] = vars(torch.optim.lr_scheduler)[config['scheduler']](config[k], **config['scheduler_config'])
-	elif k == 'adversarial' or k == 'attack':
-		config[k] = vars(torchattacks)[v](m, **config[k+'_config'])
-		
-train_loader = d_train_loader(config['batch_size'])
-test_loader = d_test_loader(config['batch_size'])
+		else:
+			attack(m,
+				val_loader = test_loader,
+				epoch = epoch,
+				writer = writer,
+				# atk = config['attack'],
+				**config
+			)
 
-# for epoch in range(10):
-import os
-for epoch, ckpt in enumerate(sorted(os.listdir('checkpoints_d'))[::8]):
-	if epoch < 0:
-		iterate.train(m,
-			train_loader = train_loader,
-			epoch = epoch,
-			writer = writer,
-			**config
-		)
+			torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
 
-	# m.load_state_dict({k:v for k,v in torch.load(f'checkpoints_/Sep05_23-18-24_Theseus_svhnfull_FasterRCNN_ordinary_step_293.pt').items() if k in m.state_dict()})
-	m.load_state_dict({k:v for k,v in torch.load('checkpoints_d/' + ckpt).items() if k in m.state_dict()})
-	print(epoch, ckpt)
+	print(m)
 
-	if epoch < 0:
-		iterate.validate(m,
-			val_loader = test_loader,
-			epoch = epoch,
-			writer = writer,
-			**config
-		)
+	writer.flush()
+	writer.close()
 
-	else:
-		iterate.attack(m,
-			val_loader = test_loader,
-			epoch = epoch,
-			writer = writer,
-			atk = config['attack'],
-			**config
-		)
-
-	torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
-
-print(m)
-
-# outputs = iterate.predict(m,
-# 	steps.predict_step,
-# 	val_loader = val_loader,
-# 	**config
-# )
-
-# print(outputs.keys(), outputs['predictions'])
-writer.flush()
-writer.close()
+if __name__ == "__main__":
+	main(config)
