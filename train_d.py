@@ -4,7 +4,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 config = {
 	'dataset':'svhnfull',
 	'training_step':'steps.d_step',
-	'batch_size':32,
+	'batch_size':64,
 	'optimizer':'SGD',
 	'optimizer_config':{
 		'lr':0.005,
@@ -18,7 +18,7 @@ config = {
 	},
 	'attack':'square_attack',
 	'attack_config':{
-		'eps':8/255,
+		'eps':25/255,
 		# 'loss':'iou_',
 		'n_queries':100
 		# 'alpha':0.2,
@@ -72,20 +72,23 @@ def main(config):
 		e['image'] = T_(e['image'])
 		return e
 
+	full_set = svhn_full.map(transforms, batched = True)
+	full_set.set_format('torch')
+
 	def collate(e):
 		# {k: [d[k] for d in e] for k in e[0]}
 		images = [d.pop('image') for d in e]
 		targets = [
 			{
 				'boxes':d['digits']['bbox'].float(),
-				'labels':torch.tensor(d['digits']['label']).fill_(1).long(), 
-				'string':torch.tensor(d['digits']['label']).long()
+				'labels':d['digits']['label'].fill_(1).long(), 
+				'string':d['digits']['label'].long()
 			} for d in e
 		]
 		return images, targets
 
-	train_loader = torch.utils.data.DataLoader(svhn_full['train'].with_transform(transforms), batch_size = config['batch_size'], collate_fn = collate, num_workers = 4, shuffle = True)
-	test_loader = torch.utils.data.DataLoader(svhn_full['test'].with_transform(transforms), batch_size = config['batch_size'], collate_fn = collate, num_workers = 4)
+	train_loader = torch.utils.data.DataLoader(full_set['train'], batch_size = config['batch_size'], collate_fn = collate, num_workers = 6, shuffle = True)
+	test_loader = torch.utils.data.DataLoader(full_set['test'], batch_size = config['batch_size'], collate_fn = collate, num_workers = 6)
 
 
 

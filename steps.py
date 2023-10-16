@@ -83,7 +83,7 @@ def attacked_c_step(net, batch, batch_idx, **kw):
 	correct = (max_labels == labels).sum()
 	return {'loss':loss, 'correct':correct}
 
-from soft_editdistance import similarity_from_edit_distance, soft_similarity_from_edit_distance
+#from soft_editdistance import similarity_from_edit_distance, soft_similarity_from_edit_distance
 
 def transcribe_eval_step(net, batch, batch_idx, **kw):
 	images, targets = batch
