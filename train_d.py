@@ -7,14 +7,14 @@ config = {
 	'batch_size':64,
 	'optimizer':'SGD',
 	'optimizer_config':{
-		'lr':0.005,
+		'lr':5e-3,
 		'momentum':0.9,
 		'weight_decay':5e-4,
 	},
 	'scheduler':'StepLR',
 	'scheduler_config':{
-		'step_size':5,
-		'gamma':0.1
+		'step_size':3,
+		'gamma':0.3
 	},
 	'attack':'square_attack',
 	'attack_config':{
@@ -52,7 +52,7 @@ def main(config):
 		elif k == 'adversarial' or k == 'attack':
 			config[k] = eval(v)
 
-	from datasets import load_dataset
+	from datasets import load_dataset, concatenate_datasets
 	svhn_full = load_dataset('svhn', 'full_numbers')
 
 	import numpy as np
@@ -60,14 +60,14 @@ def main(config):
 	from torchvision.ops import box_convert
 
 	T_ = T.Compose([
-		T.Resize((112, 112)),
+		# T.Resize((112, 112)),
 		T.ToImageTensor(),
 		T.ConvertImageDtype(),
 	])
 
 	def transforms(e):
 		for d, x in zip(e['digits'], e['image']):
-			d['bbox'] = d['bbox'] * np.tile(np.array((112, 112)) / x.size, 2)
+			# d['bbox'] = d['bbox'] * np.tile(np.array((112, 112)) / x.size, 2)
 			d['bbox'] = box_convert(torch.tensor(d['bbox']), 'xywh', 'xyxy')
 		e['image'] = T_(e['image'])
 		return e
@@ -86,12 +86,12 @@ def main(config):
 			})
 		return images, targets
 
-	train_loader = torch.utils.data.DataLoader(full_set['train'], batch_size = config['batch_size'], collate_fn = collate, num_workers = 6, shuffle = True)
+	train_loader = torch.utils.data.DataLoader(concatenate_datasets([full_set['extra'], full_set['train']]), batch_size = config['batch_size'], collate_fn = collate, num_workers = 6, shuffle = True)
 	test_loader = torch.utils.data.DataLoader(full_set['test'], batch_size = config['batch_size'], collate_fn = collate, num_workers = 6)
 
 
 
-	for epoch in range(20):
+	for epoch in range(40):
 		if epoch > 0:
 			train(m,
 				train_loader = train_loader,
@@ -100,7 +100,7 @@ def main(config):
 				**config
 			)
 
-		if epoch < 2:
+		if epoch < 1:
 			validate(m,
 				val_loader = test_loader,
 				epoch = epoch,
@@ -117,7 +117,7 @@ def main(config):
 				**config
 			)
 
-			# torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
+			torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
 
 	print(m)
 

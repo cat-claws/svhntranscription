@@ -28,7 +28,7 @@ def map_step(net, batch, batch_idx, **kw):
 	# 	p['scores'] = p['scores'][ind]
 	# 	p['labels'] = p['labels'][ind]
 
-	metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5, 0.75])
+	metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5, 0.75], rec_thresholds = [0.3, 0.5, 0.7])
 	mAP = metric.forward(outputs, targets)
 
 	return {k:v * len(images) for k, v in mAP.items() if k in {'map', 'map_75', 'map_50'}}
@@ -54,11 +54,11 @@ def attacked_map_step(net, batch, batch_idx, **kw):
 	outputs = net(images_)
 	outputs = [{k: v.detach().to('cpu') for k, v in t.items()} for t in outputs]
 
-	for p in outputs:
-		ind = p['scores'] > .5
-		p['boxes'] = p['boxes'][ind]
-		p['scores'] = p['scores'][ind]
-		p['labels'] = p['labels'][ind]
+	# for p in outputs:
+	# 	ind = p['scores'] > .5
+	# 	p['boxes'] = p['boxes'][ind]
+	# 	p['scores'] = p['scores'][ind]
+	# 	p['labels'] = p['labels'][ind]
 
 	with torch.no_grad():
 		metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5, 0.75])
