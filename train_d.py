@@ -18,9 +18,9 @@ config = {
 	},
 	'attack':'square_attack',
 	'attack_config':{
-		'eps':25/255,
+		'eps':50/255,
 		# 'loss':'iou_',
-		'n_queries':100
+		'n_queries':5
 		# 'alpha':0.2,
 		# 'steps':40,
 		# 'random_start':True,
@@ -76,15 +76,14 @@ def main(config):
 	full_set.set_format('torch')
 
 	def collate(e):
-		# {k: [d[k] for d in e] for k in e[0]}
-		images = [d.pop('image') for d in e]
-		targets = [
-			{
+		images, targets = [], []
+		for d in e:
+			images.append(d['image'])
+			targets.append({
 				'boxes':d['digits']['bbox'].float(),
 				'labels':d['digits']['label'].fill_(1).long(), 
 				'string':d['digits']['label'].long()
-			} for d in e
-		]
+			})
 		return images, targets
 
 	train_loader = torch.utils.data.DataLoader(full_set['train'], batch_size = config['batch_size'], collate_fn = collate, num_workers = 6, shuffle = True)
@@ -110,15 +109,15 @@ def main(config):
 			)
 
 		else:
-			attack(m,
+			# m.load_state_dict(torch.load(f"checkpoints/Oct17_12-46-49_vm1_svhnfull_FasterRCNN_steps.d_step_{epoch:03}.pt"))
+			validate(m,
 				val_loader = test_loader,
 				epoch = epoch,
 				writer = writer,
-				# atk = config['attack'],
 				**config
 			)
 
-			torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
+			# torch.save(m.state_dict(), "checkpoints/" + writer.log_dir.split('/')[-1] + f"_{epoch:03}.pt")
 
 	print(m)
 

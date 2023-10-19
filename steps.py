@@ -22,24 +22,30 @@ def map_step(net, batch, batch_idx, **kw):
 	outputs = net(images)
 	outputs = [{k: v.detach().to('cpu') for k, v in t.items()} for t in outputs]
 
-	for p in outputs:
-		ind = p['scores'] > .5
-		p['boxes'] = p['boxes'][ind]
-		p['scores'] = p['scores'][ind]
-		p['labels'] = p['labels'][ind]
+	# for p in outputs:
+	# 	ind = p['scores'] > .5
+	# 	p['boxes'] = p['boxes'][ind]
+	# 	p['scores'] = p['scores'][ind]
+	# 	p['labels'] = p['labels'][ind]
 
-	metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5], rec_thresholds=[0.5])
-	mAP = metric.forward(outputs, targets)['map_50'] * len(images)
+	metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5, 0.75])
+	mAP = metric.forward(outputs, targets)
 
-	return {'mAP50':mAP}
+	return {k:v * len(images) for k, v in mAP.items() if k in {'map', 'map_75', 'map_50'}}
 
 def _iou_calculate_step(images, model, labels):
 	outputs = model(images)
 	boxes = [p['boxes'][p['scores'] > .5] for p in outputs]
-	
-	return torch.stack([
-		torch.cat((torchvision.ops.box_iou(b, l).flatten(), torch.tensor([0], device = b.device))).max() for b, l in zip(boxes, labels)
-	]) - 0.4
+
+	ious = []
+	for b, l in zip(boxes, labels):
+		iou = torchvision.ops.box_iou(b, l)
+		if iou.numel() > 0:
+			ious.append(iou.max(dim = 1)[0].mean().item())
+		else:
+			ious.append(0)
+
+	return torch.tensor(ious, device = images.device) - 0.4
 
 def attacked_map_step(net, batch, batch_idx, **kw):
 	images, targets = batch
@@ -55,10 +61,10 @@ def attacked_map_step(net, batch, batch_idx, **kw):
 		p['labels'] = p['labels'][ind]
 
 	with torch.no_grad():
-		metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5], rec_thresholds=[0.5])
-		mAP = metric.forward(outputs, targets)['map_50'] * len(images)
-
-	return {'mAP50':mAP}
+		metric = MeanAveragePrecision(iou_type="bbox", box_format='xyxy', iou_thresholds=[0.5, 0.75])
+		mAP = metric.forward(outputs, targets)
+		
+	return {k:v * len(images) for k, v in mAP.items() if k in {'map', 'map_75', 'map_50'}}
 
 
 def c_step(net, batch, batch_idx, **kw):
