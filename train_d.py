@@ -5,22 +5,22 @@ config = {
 	'dataset':'svhnfull',
 	'training_step':'steps.d_step',
 	'batch_size':64,
-	'optimizer':'SGD',
+	'optimizer':'Adam',
 	'optimizer_config':{
-		'lr':5e-3,
-		'momentum':0.9,
-		'weight_decay':5e-4,
+		'lr':1e-3,
+		# 'momentum':0.9,
+		# 'weight_decay':5e-4,
 	},
 	'scheduler':'StepLR',
 	'scheduler_config':{
-		'step_size':3,
-		'gamma':0.3
+		'step_size':10,
+		'gamma':0.1
 	},
 	'attack':'square_attack',
 	'attack_config':{
 		'eps':50/255,
 		# 'loss':'iou_',
-		'n_queries':5
+		'n_queries':50
 		# 'alpha':0.2,
 		# 'steps':40,
 		# 'random_start':True,
@@ -52,12 +52,33 @@ def main(config):
 		elif k == 'adversarial' or k == 'attack':
 			config[k] = eval(v)
 
-	from datasets import load_dataset, concatenate_datasets
+	from datasets import load_dataset, concatenate_datasets, Sequence, Value, ClassLabel, Features
+
 	svhn_full = load_dataset('svhn', 'full_numbers')
 
 	import numpy as np
 	import torchvision.transforms.v2 as T
 	from torchvision.ops import box_convert
+
+	#######################
+	T_ = T.Compose([
+		T.Resize((112, 112)),
+		T.ToImageTensor(),
+		T.ConvertImageDtype(),
+	])
+
+	def transforms(e):
+		for d, x in zip(e['digits'], e['image']):
+			d['bbox'] = d['bbox'] * np.tile(np.array((112, 112)) / x.size, 2)
+			d['bbox'] = box_convert(torch.tensor(d['bbox']), 'xywh', 'xyxy')
+		e['image'] = T_(e['image'])
+		return e
+
+	full_set = svhn_full.map(transforms, batched = True).flatten().cast(Features({'image': Sequence(feature=Sequence(feature=Sequence(feature=Value(dtype='float32', id=None), length=-1, id=None), length=-1, id=None), length=-1, id=None),
+	'digits.bbox': Sequence(feature=Sequence(feature=Value(dtype='float32', id=None), length=4, id=None), length=-1, id=None),
+	'digits.label': Sequence(feature=ClassLabel(names=['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], id=None), length=-1, id=None)}))
+	full_set.set_format('torch')
+	#######################
 
 	T_ = T.Compose([
 		# T.Resize((112, 112)),
@@ -71,22 +92,26 @@ def main(config):
 			d['bbox'] = box_convert(torch.tensor(d['bbox']), 'xywh', 'xyxy')
 		e['image'] = T_(e['image'])
 		return e
+	# from datasets import 
+	full_set_ = svhn_full.map(transforms, batched = True).flatten().cast(Features({'image': Sequence(feature=Sequence(feature=Sequence(feature=Value(dtype='float32', id=None), length=-1, id=None), length=-1, id=None), length=-1, id=None),
+	'digits.bbox': Sequence(feature=Sequence(feature=Value(dtype='float32', id=None), length=4, id=None), length=-1, id=None),
+	'digits.label': Sequence(feature=ClassLabel(names=['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], id=None), length=-1, id=None)}))
+	full_set_.set_format('torch')
+	#######################
 
-	full_set = svhn_full.map(transforms, batched = True)
-	full_set.set_format('torch')
 
 	def collate(e):
 		images, targets = [], []
 		for d in e:
 			images.append(d['image'])
 			targets.append({
-				'boxes':d['digits']['bbox'].float(),
-				'labels':d['digits']['label'].fill_(1).long(), 
-				'string':d['digits']['label'].long()
+				'boxes':d['digits.bbox'].float(),
+				'labels':d['digits.label'].fill_(1).long(), 
+				'string':d['digits.label'].long()
 			})
 		return images, targets
 
-	train_loader = torch.utils.data.DataLoader(concatenate_datasets([full_set['extra'], full_set['train']]), batch_size = config['batch_size'], collate_fn = collate, num_workers = 6, shuffle = True)
+	train_loader = torch.utils.data.DataLoader(concatenate_datasets([full_set_['extra'], full_set['extra'], full_set_['train'], full_set['train']]), batch_size = config['batch_size'], collate_fn = collate, num_workers = 6, shuffle = True)
 	test_loader = torch.utils.data.DataLoader(full_set['test'], batch_size = config['batch_size'], collate_fn = collate, num_workers = 6)
 
 
@@ -109,7 +134,7 @@ def main(config):
 			)
 
 		else:
-			# m.load_state_dict(torch.load(f"checkpoints/Oct17_12-46-49_vm1_svhnfull_FasterRCNN_steps.d_step_{epoch:03}.pt"))
+			# m.load_state_dict(torch.load(f"checkpoints/Oct19_16-13-15_vm1_svhnfull_FasterRCNN_steps.d_step_{epoch:03}.pt"))
 			validate(m,
 				val_loader = test_loader,
 				epoch = epoch,
